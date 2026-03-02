@@ -43,6 +43,10 @@
         packages = {
           default = pkgs.callPackage ./nix { };
           web = pkgs.callPackage ./nix { targetFlutterPlatform = "web"; };
+          apk = pkgs.callPackage ./nix {
+            targetFlutterPlatform = "apk";
+            inherit inputs system;
+          };
         };
       };
     });
