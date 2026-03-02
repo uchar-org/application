@@ -1,6 +1,6 @@
-{ lib, stdenv, fetchFromGitHub, fetchzip, imagemagick, libgbm, libdrm
-, flutter338, pulseaudio, webkitgtk_4_1, copyDesktopItems, makeDesktopItem
-, callPackage
+{ inputs, system, lib, stdenv, fetchFromGitHub, fetchzip, imagemagick, libgbm
+, libdrm, flutter338, pulseaudio, webkitgtk_4_1, copyDesktopItems
+, makeDesktopItem, jdk17_headless, google-chrome, callPackage
 , vodozemac-wasm ? callPackage ./vodozemac-wasm.nix { flutter = flutter338; }
 , targetFlutterPlatform ? "linux", }:
 
@@ -13,7 +13,32 @@ let
     sha256 = "sha256-lGvWAicdKbNdMZAQS9Qyxv737G/sBI/hKbge/Xw5bDM=";
 
   };
-in flutter338.buildFlutterApplication (rec {
+
+  pinnedFlutter = flutter338;
+
+  androidCustomPackage = inputs.android-nixpkgs.sdk.${system} (
+    # show all potential values with
+    # nix flake show github:tadfisher/android-nixpkgs
+    sdkPkgs:
+    with sdkPkgs; [
+      cmdline-tools-latest
+      cmake-3-22-1
+      build-tools-35-0-0
+      ndk-27-0-12077973
+      ndk-28-2-13676358
+      platform-tools
+      emulator
+      platforms-android-31
+      platforms-android-33
+      platforms-android-34
+      platforms-android-35
+      platforms-android-36
+      system-images-android-36-google-apis-playstore-x86-64
+    ]);
+
+  pinnedJDK = jdk17_headless;
+
+in pinnedFlutter.buildFlutterApplication (rec {
   pname = "uchar-${targetFlutterPlatform}";
   version = "2.4.1";
 
@@ -110,5 +135,37 @@ in flutter338.buildFlutterApplication (rec {
   preBuild = ''
     cp -r ${vodozemac-wasm}/* ./assets/vodozemac/
   '';
-})
+}
+
+  // lib.optionalAttrs (targetFlutterPlatform == "apk") {
+    targetFlutterPlatform = "universal";
+
+    ANDROID_SDK_ROOT = "${androidCustomPackage}/share/android-sdk";
+    JAVA_HOME = pinnedJDK;
+    FLUTTER_ROOT = "${pinnedFlutter}";
+    CHROME_EXECUTABLE = "${google-chrome}/bin/google-chrome-stable";
+    GRADLE_OPTS =
+      "-Dorg.gradle.project.android.aapt2FromMavenOverride=${androidCustomPackage}/share/android-sdk/build-tools/35.0.0/aapt2";
+
+    nativeBuildInputs = [ androidCustomPackage pinnedJDK ];
+
+    # installPhase = ''
+    #   runHook preInstall
+
+    #   mkdir $out
+    #   cp -r ./* $out/
+
+    #   runHook postInstall
+    # '';
+
+    buildPhase = ''
+      runHook preBuild
+
+      mkdir -p $out/build/flutter_assets/fonts
+
+      flutter build apk -v --split-debug-info="$debug" $flutterBuildFlags
+
+      runHook postBuild
+    '';
+  })
 
