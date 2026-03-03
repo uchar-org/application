@@ -1,12 +1,20 @@
 { inputs, system, lib, stdenv, fetchFromGitHub, fetchzip, imagemagick, libgbm
 , libdrm, flutter338, pulseaudio, webkitgtk_4_1, copyDesktopItems
-, makeDesktopItem, jdk17_headless, google-chrome, callPackage
+, makeDesktopItem, jdk17_headless, google-chrome, callPackage, runCommand, yj
 , vodozemac-wasm ? callPackage ./vodozemac-wasm.nix { flutter = flutter338; }
 , targetFlutterPlatform ? "linux", }:
 
 let
+  importYAML = path:
+    lib.importJSON (runCommand "converted.json" {
+      pname = "converted.json";
+      version = "0.0.1";
+      nativeBuildInputs = [ yj ];
+    } ''
+      yj < ${path} > $out
+    '');
+  pubspecLock = importYAML ../pubspec.lock;
   libwebrtcRpath = lib.makeLibraryPath [ libgbm libdrm ];
-  pubspecLock = lib.importJSON ./pubspec.lock.json;
   libwebrtc = fetchzip {
     url =
       "https://github.com/flutter-webrtc/flutter-webrtc/releases/download/v1.3.0/libwebrtc.zip";
