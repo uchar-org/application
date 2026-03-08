@@ -7,7 +7,7 @@
     # nixpkgs.url = "github:nixos/nixpkgs/nixos-25.11";
 
     # Fresh and new for testing
-    nixpkgs.url = "github:xinux-org/upstream";
+    nixpkgs.url = "github:xinux-org/upstream?ref=flutter-vodozemac";
 
     # The flake-parts library
     flake-parts.url = "github:hercules-ci/flake-parts";
