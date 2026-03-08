@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
@@ -38,7 +39,6 @@ class SendFileDialog extends StatefulWidget {
 class SendFileDialogState extends State<SendFileDialog> {
   bool compress = true;
 
-  /// Images smaller than 20kb don't need compression.
   static const int minSizeToCompress = 20 * 1000;
 
   final TextEditingController _labelTextController = TextEditingController();
@@ -62,7 +62,6 @@ class SendFileDialogState extends State<SendFileDialog> {
         final length = await xfile.length();
         final mimeType = xfile.mimeType ?? lookupMimeType(xfile.path);
 
-        // Generate video thumbnail
         if (PlatformInfos.isMobile &&
             mimeType != null &&
             mimeType.startsWith('video')) {
@@ -70,7 +69,6 @@ class SendFileDialogState extends State<SendFileDialog> {
           thumbnail = await xfile.getVideoThumbnail();
         }
 
-        // If file is a video, shrink it!
         if (PlatformInfos.isMobile &&
             mimeType != null &&
             mimeType.startsWith('video')) {
@@ -82,7 +80,6 @@ class SendFileDialogState extends State<SendFileDialog> {
           if (length > maxUploadSize) {
             throw FileTooBigMatrixException(length, maxUploadSize);
           }
-          // Else we just create a MatrixFile
           file = MatrixFile(
             bytes: await xfile.readAsBytes(),
             name: xfile.name,
@@ -131,7 +128,6 @@ class SendFileDialogState extends State<SendFileDialog> {
             ),
           );
           await Future.delayed(retryAfterDuration);
-
           scaffoldMessenger.showLoadingSnackBar(l10n.sendingAttachment);
 
           await widget.room.sendFileEvent(
@@ -160,8 +156,6 @@ class SendFileDialogState extends State<SendFileDialog> {
       );
       rethrow;
     }
-
-    return;
   }
 
   Future<String> _calcCombinedFileSize() async {
@@ -169,6 +163,127 @@ class SendFileDialogState extends State<SendFileDialog> {
       widget.files.map((file) => file.length()),
     );
     return lengths.fold<double>(0, (p, length) => p + length).sizeString;
+  }
+
+  Widget _buildSingleImagePreview(XFile file) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(AppConfig.borderRadius / 2),
+      child: FutureBuilder<List<int>>(
+        future: file.readAsBytes(),
+        builder: (context, snapshot) {
+          if (snapshot.data == null) {
+            return const SizedBox(
+              width: 220,
+              height: 220,
+              child: Center(child: CircularProgressIndicator.adaptive()),
+            );
+          }
+          if (snapshot.hasError) {
+            return const SizedBox(
+              width: 220,
+              height: 220,
+              child: Center(
+                child: Icon(Icons.broken_image_outlined, size: 64),
+              ),
+            );
+          }
+          return Image.memory(
+            snapshot.data! as dynamic,
+            height: 220,
+            width: 220,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => const SizedBox(
+              width: 220,
+              height: 220,
+              child: Center(
+                child: Icon(Icons.broken_image_outlined, size: 64),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildImageGrid(BuildContext context) {
+    final count = widget.files.length;
+    final size = MediaQuery.of(context).size;
+    final dialogWidth = (size.width > 400 ? 360.0 : size.width * 0.85);
+    final maxGridHeight = size.height * 0.45;
+
+    final crossAxisCount = count <= 2 ? 2 : 3;
+    final spacing = 6.0;
+    final cellSize =
+        (dialogWidth - spacing * (crossAxisCount - 1)) / crossAxisCount;
+    final rowCount = (count / crossAxisCount).ceil();
+    final gridHeight = (cellSize * rowCount + spacing * (rowCount - 1))
+        .clamp(0.0, maxGridHeight);
+
+    return SizedBox(
+      height: gridHeight,
+      width: dialogWidth,
+      child: GridView.builder(
+        physics: gridHeight >= maxGridHeight
+            ? const BouncingScrollPhysics()
+            : const NeverScrollableScrollPhysics(),
+        shrinkWrap: true,
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: crossAxisCount,
+          crossAxisSpacing: spacing,
+          mainAxisSpacing: spacing,
+        ),
+        itemCount: count,
+        itemBuilder: (context, index) {
+          return FutureBuilder<List<int>>(
+            future: widget.files[index].readAsBytes(),
+            builder: (context, snapshot) {
+              return ClipRRect(
+                borderRadius:
+                    BorderRadius.circular(AppConfig.borderRadius / 2),
+                child: snapshot.data != null
+                    ? GestureDetector(
+                      onTap: () {
+                        ProfessionalImagePreview.show(
+                          context,
+                          bytes: snapshot.data as dynamic,
+                          heroTag: widget.key.toString(),
+                        );
+                      },
+                      child: Hero(
+                        tag: widget.key.toString(),
+                        child: Image.memory(
+                            snapshot.data! as dynamic,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Container(
+                              color: Colors.grey.shade300,
+                              child: const Icon(
+                                Icons.broken_image_outlined,
+                              ),
+                            ),
+                          ),
+                      ),
+                    )
+                    : snapshot.hasError
+                        ? Container(
+                            color: Colors.grey.shade300,
+                            child: const Icon(
+                              Icons.broken_image_outlined,
+                            ),
+                          )
+                        : Container(
+                            color: Colors.grey.shade200,
+                            child: const Center(
+                              child: CircularProgressIndicator.adaptive(
+                                strokeWidth: 2,
+                              ),
+                            ),
+                          ),
+              );
+            },
+          );
+        },
+      ),
+    );
   }
 
   @override
@@ -215,110 +330,44 @@ class SendFileDialogState extends State<SendFileDialog> {
         return AlertDialog.adaptive(
           title: Text(sendStr),
           content: SizedBox(
-            width: 256,
+            width: 360,
             child: SingleChildScrollView(
               child: Column(
-                mainAxisSize: .min,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
+
+                  // ── RASM PREVIEW ──
                   if (uniqueFileType == 'image')
                     Padding(
                       padding: const EdgeInsets.only(bottom: 16.0),
-                      child: SizedBox(
-                        height: 256,
-                        child: Center(
-                          child: ListView.builder(
-                            shrinkWrap: true,
-                            itemCount: widget.files.length,
-                            scrollDirection: Axis.horizontal,
-                            itemBuilder: (context, i) => Padding(
-                              padding: const EdgeInsets.only(right: 8.0),
-                              child: Material(
-                                borderRadius: BorderRadius.circular(
-                                  AppConfig.borderRadius / 2,
-                                ),
-                                color: Colors.black,
-                                clipBehavior: Clip.hardEdge,
-                                child: FutureBuilder(
-                                  future: widget.files[i].readAsBytes(),
-                                  builder: (context, snapshot) {
-                                    final bytes = snapshot.data;
-                                    if (bytes == null) {
-                                      return const Center(
-                                        child:
-                                            CircularProgressIndicator.adaptive(),
-                                      );
-                                    }
-                                    if (snapshot.error != null) {
-                                      Logs().w(
-                                        'Unable to preview image',
-                                        snapshot.error,
-                                        snapshot.stackTrace,
-                                      );
-                                      return const Center(
-                                        child: SizedBox(
-                                          width: 256,
-                                          height: 256,
-                                          child: Icon(
-                                            Icons.broken_image_outlined,
-                                            size: 64,
-                                          ),
-                                        ),
-                                      );
-                                    }
-                                    return Image.memory(
-                                      bytes,
-                                      height: 256,
-                                      width: widget.files.length == 1
-                                          ? 256 - 36
-                                          : null,
-                                      fit: BoxFit.contain,
-                                      errorBuilder: (context, e, s) {
-                                        Logs().w(
-                                          'Unable to preview image',
-                                          e,
-                                          s,
-                                        );
-                                        return const Center(
-                                          child: SizedBox(
-                                            width: 256,
-                                            height: 256,
-                                            child: Icon(
-                                              Icons.broken_image_outlined,
-                                              size: 64,
-                                            ),
-                                          ),
-                                        );
-                                      },
-                                    );
-                                  },
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
+                      child: widget.files.length == 1
+                          ? Center(
+                              child:
+                                  _buildSingleImagePreview(widget.files.first),
+                            )
+                          : _buildImageGrid(context),
                     ),
+
+                  // ── BOSHQA FAYL PREVIEW ──
                   if (uniqueFileType != 'image')
                     Padding(
                       padding: const EdgeInsets.only(bottom: 16.0),
                       child: Row(
                         children: [
                           Icon(
-                            uniqueFileType == null
-                                ? Icons.description_outlined
-                                : uniqueFileType == 'video'
+                            uniqueFileType == 'video'
                                 ? Icons.video_file_outlined
                                 : uniqueFileType == 'audio'
-                                ? Icons.audio_file_outlined
-                                : Icons.description_outlined,
+                                    ? Icons.audio_file_outlined
+                                    : Icons.description_outlined,
                             size: 32,
                           ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Column(
-                              mainAxisSize: .min,
-                              crossAxisAlignment: .start,
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
                                   fileName,
@@ -337,6 +386,8 @@ class SendFileDialogState extends State<SendFileDialog> {
                         ],
                       ),
                     ),
+
+                  // ── LABEL (faqat 1 ta fayl bo'lsa) ──
                   if (widget.files.length == 1)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 8.0),
@@ -352,7 +403,7 @@ class SendFileDialogState extends State<SendFileDialog> {
                   // Workaround for SwitchListTile.adaptive crashes in CupertinoDialog
                   if ({'image', 'video'}.contains(uniqueFileType))
                     Row(
-                      crossAxisAlignment: .center,
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         if ({
                           TargetPlatform.iOS,
@@ -374,18 +425,12 @@ class SendFileDialogState extends State<SendFileDialog> {
                         const SizedBox(width: 16),
                         Expanded(
                           child: Column(
-                            mainAxisSize: .min,
-                            crossAxisAlignment: .start,
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Row(
-                                mainAxisSize: .min,
-                                children: [
-                                  Text(
-                                    L10n.of(context).compress,
-                                    style: theme.textTheme.titleMedium,
-                                    textAlign: TextAlign.left,
-                                  ),
-                                ],
+                              Text(
+                                L10n.of(context).compress,
+                                style: theme.textTheme.titleMedium,
                               ),
                               if (!compress)
                                 Text(
@@ -442,6 +487,83 @@ extension on ScaffoldMessengerState {
             const SizedBox(width: 16),
             Text(title),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class ProfessionalImagePreview extends StatefulWidget {
+  final Uint8List bytes;
+  final String heroTag;
+
+  const ProfessionalImagePreview({
+    super.key,
+    required this.bytes,
+    required this.heroTag,
+  });
+
+  static Future<void> show(
+    BuildContext context, {
+    required Uint8List bytes,
+    required String heroTag,
+  }) {
+    return showDialog(
+      context: context,
+      barrierColor: Colors.black,
+      builder: (_) => ProfessionalImagePreview(
+        bytes: bytes,
+        heroTag: heroTag,
+      ),
+    );
+  }
+
+  @override
+  State<ProfessionalImagePreview> createState() =>
+      _ProfessionalImagePreviewState();
+}
+
+class _ProfessionalImagePreviewState extends State<ProfessionalImagePreview> {
+  final TransformationController _controller = TransformationController();
+
+  double _scale = 1;
+
+  void _handleDoubleTap() {
+    if (_scale > 1) {
+      _controller.value = Matrix4.identity();
+      _scale = 1;
+    } else {
+      _controller.value = Matrix4.identity()..scale(2.5);
+      _scale = 2.5;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => Navigator.pop(context),
+      onVerticalDragEnd: (details) {
+        if (details.primaryVelocity != null &&
+            details.primaryVelocity!.abs() > 300) {
+          Navigator.pop(context);
+        }
+      },
+      onDoubleTap: _handleDoubleTap,
+      child: Material(
+        color: Colors.black,
+        child: Center(
+          child: Hero(
+            tag: widget.heroTag,
+            child: InteractiveViewer(
+              transformationController: _controller,
+              minScale: 0.5,
+              maxScale: 5,
+              child: Image.memory(
+                widget.bytes,
+                fit: BoxFit.contain,
+              ),
+            ),
+          ),
         ),
       ),
     );

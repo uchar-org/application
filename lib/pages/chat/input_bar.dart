@@ -29,6 +29,7 @@ class InputBar extends StatefulWidget {
   final bool? autofocus;
   final bool readOnly;
   final List<Emoji> suggestionEmojis;
+  final Map<ShortcutActivator, VoidCallback> bindings;
 
   const InputBar({
     required this.room,
@@ -45,6 +46,7 @@ class InputBar extends StatefulWidget {
     this.textInputAction,
     this.readOnly = false,
     required this.suggestionEmojis,
+    required this.bindings,
     super.key,
   });
 
@@ -378,30 +380,33 @@ class _InputBarState extends State<InputBar> {
       focusNode: widget.focusNode,
       textEditingController: widget.controller,
       optionsBuilder: getSuggestions,
-      fieldViewBuilder: (context, controller, focusNode, _) => TextField(
-        controller: controller,
-        focusNode: focusNode,
-        readOnly: widget.readOnly,
-        contextMenuBuilder: (c, e) => markdownContextBuilder(c, e, controller),
-        contentInsertionConfiguration: ContentInsertionConfiguration(
-          onContentInserted: (KeyboardInsertedContent content) {
-            final data = content.data;
-            if (data == null) return;
-            final file = MatrixFile(mimeType: content.mimeType, bytes: data, name: content.uri.split('/').last);
-            widget.room.sendFileEvent(file, shrinkImageMaxDimension: 1600);
-          },
+      fieldViewBuilder: (context, controller, focusNode, _) => CallbackShortcuts(
+        bindings: widget.bindings,
+        child: TextField(
+          controller: controller,
+          focusNode: focusNode,
+          readOnly: widget.readOnly,
+          contextMenuBuilder: (c, e) => markdownContextBuilder(c, e, controller),
+          contentInsertionConfiguration: ContentInsertionConfiguration(
+            onContentInserted: (KeyboardInsertedContent content) {
+              final data = content.data;
+              if (data == null) return;
+              final file = MatrixFile(mimeType: content.mimeType, bytes: data, name: content.uri.split('/').last);
+              widget.room.sendFileEvent(file, shrinkImageMaxDimension: 1600);
+            },
+          ),
+          minLines: widget.minLines,
+          maxLines: widget.maxLines,
+          keyboardType: widget.keyboardType!,
+          textInputAction: widget.textInputAction,
+          autofocus: widget.autofocus!,
+          inputFormatters: [LengthLimitingTextInputFormatter((maxPDUSize / 3).floor())],
+          onSubmitted: (text) => widget.onSubmitted!(text),
+          maxLength: AppSettings.textMessageMaxLength.value,
+          decoration: widget.decoration,
+          onChanged: (text) => widget.onChanged!(text),
+          textCapitalization: TextCapitalization.sentences,
         ),
-        minLines: widget.minLines,
-        maxLines: widget.maxLines,
-        keyboardType: widget.keyboardType!,
-        textInputAction: widget.textInputAction,
-        autofocus: widget.autofocus!,
-        inputFormatters: [LengthLimitingTextInputFormatter((maxPDUSize / 3).floor())],
-        onSubmitted: (text) => widget.onSubmitted!(text),
-        maxLength: AppSettings.textMessageMaxLength.value,
-        decoration: widget.decoration,
-        onChanged: (text) => widget.onChanged!(text),
-        textCapitalization: TextCapitalization.sentences,
       ),
       optionsViewBuilder: (c, onSelected, s) {
         final suggestions = s.toList();

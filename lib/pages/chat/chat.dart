@@ -45,6 +45,8 @@ import '../../utils/element_call/call_service.dart';
 import 'send_file_dialog.dart';
 import 'send_location_dialog.dart';
 
+import 'package:pasteboard/pasteboard.dart';
+
 class ChatPage extends StatelessWidget {
   final String roomId;
   final List<ShareItem>? shareItems;
@@ -134,6 +136,47 @@ class ChatController extends State<ChatPageWithRoom>
       context: context,
       builder: (c) => SendFileDialog(
         files: details.files,
+        room: room,
+        outerContext: context,
+        threadRootEventId: activeThreadId,
+        threadLastEventId: threadLastEventId,
+      ),
+    );
+  }
+
+  Future<void> handlePaste() async {
+    final imageBytes = await Pasteboard.image;
+    final files = await Pasteboard.files();
+
+    if (imageBytes != null || files.isNotEmpty) {
+      debugPrint("imageBytes: ${imageBytes?.length}");
+      _showUploadDialog(imageBytes, files);
+    } else {
+      final data = await Clipboard.getData(Clipboard.kTextPlain);
+      if (data?.text != null) {
+        final currentText = sendController.text;
+        final selection = sendController.selection;
+        final newText = currentText.replaceRange(selection.start, selection.end, data!.text!);
+        sendController.text = newText;
+      }
+    }
+  }
+
+  void _showUploadDialog(Uint8List? image, List<String>? files) async {
+    final imageFiles = <XFile>[];
+
+    if (files != null) {
+      imageFiles.addAll(
+        files.map<XFile>((String path) {
+          return XFile(path);
+        }).toList(),
+      );
+    }
+
+    await showAdaptiveDialog(
+      context: context,
+      builder: (c) => SendFileDialog(
+        files: imageFiles,
         room: room,
         outerContext: context,
         threadRootEventId: activeThreadId,

@@ -89,6 +89,7 @@ dependencies:
   fcm_shared_isolate: ^0.2.0
   flutter_inappwebview: ^6.1.5
   olm: ^3.1.0
+  pasteboard: ^0.5.0
 
 dev_dependencies:
 

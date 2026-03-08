@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'package:animations/animations.dart';
 import 'package:emoji_picker_flutter/locales/default_emoji_set_locale.dart';
+import 'package:flutter/services.dart';
 import 'package:matrix/matrix.dart';
 
 import 'package:fluffychat/config/setting_keys.dart';
@@ -311,6 +312,16 @@ class ChatInputRow extends StatelessWidget {
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 2.0),
                       child: InputBar(
+                        bindings: {
+                          const SingleActivator(LogicalKeyboardKey.keyV, control: true): () {
+                            debugPrint("Ctrl + V");
+                            controller.handlePaste();
+                          },
+                          const SingleActivator(LogicalKeyboardKey.keyV, meta: true): () {
+                            debugPrint("Cmd + V");
+                            controller.handlePaste();
+                          },
+                        },
                         room: controller.room,
                         minLines: 1,
                         maxLines: 8,
