@@ -1,5 +1,7 @@
+import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:fluffychat/utils/native_mac/mac_haptic.dart';
 import 'package:fluffychat/widgets/my_swipe_to.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -191,8 +193,14 @@ class Message extends StatelessWidget {
     return Center(
       child: MySwipeable(
         key: ValueKey(event.eventId),
+        threshold: 70,
         onSwipeEnd: () {
           HapticFeedback.lightImpact();
+
+          if (Platform.isMacOS) {
+            MacHaptic.lightImpact();
+          }
+
           onSwipe();
         },
         child: Container(
