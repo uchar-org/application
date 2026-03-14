@@ -1,113 +1,56 @@
-# flake: {pkgs, ...}: let
-#   # Hostplatform system
-#   system = pkgs.hostPlatform.system;
+{
+  description =
+    "A beginning of an awesome project bootstrapped with github:bleur-org/templates";
 
-#   # Production package
-#   # base = flake.packages.${system}.default;
-# in
-#   pkgs.mkShell {
-#     # inputsFrom = [base];
+  inputs = {
+    # Stable for keeping thins clean
+    # nixpkgs.url = "github:nixos/nixpkgs/nixos-25.11";
 
-#     packages = with pkgs; [
-#       nixd
-#       statix
-#       deadnix
-#       alejandra
-#     ];
-#   }
+    # Fresh and new for testing
+    nixpkgs.url = "github:xinux-org/upstream?ref=flutter-vodozemac";
 
-flake:
-{ pkgs, inputs, ... }@attrs:
-let
-  # Hostplatform system
+    # The flake-parts library
+    flake-parts.url = "github:hercules-ci/flake-parts";
 
-  system = pkgs.hostPlatform.system;
-  formatter = pkgs.alejandra;
-
-  androidEmulator = pkgs.androidenv.emulateApp {
-    name = "emulator";
-    platformVersion = "36";
-    abiVersion = "x86_64";
-    systemImageType = "google_apis_playstore";
-    configOptions = {
-      "hw.gpu.enabled" = "yes";
-      "hw.gpu.mode" = "swiftshader_indirect";
-      "hw.keyboard" = "yes";
-      "hw.kainKeys" = "yes";
+    android-nixpkgs = {
+      url = "github:tadfisher/android-nixpkgs";
+      inputs = { nixpkgs.follows = "nixpkgs"; };
     };
-  };
-  androidEmulatorNoGPU = pkgs.androidenv.emulateApp {
-    name = "emulator";
-    platformVersion = "36";
-    abiVersion = "x86_64";
-    systemImageType = "google_apis_playstore";
-    configOptions = {
-      "hw.gpu.enabled" = "yes";
-      "hw.keyboard" = "yes";
-      "hw.kainKeys" = "yes";
-    };
+
   };
 
-  pinnedFlutter = pkgs.flutter338;
-  pinnedJDK = pkgs.jdk17_headless;
-  androidCustomPackage = inputs.android-nixpkgs.sdk.${system} (
-    # show all potential values with
-    # nix flake show github:tadfisher/android-nixpkgs
-    sdkPkgs:
-    with sdkPkgs; [
-      cmdline-tools-latest
-      cmake-3-22-1
-      build-tools-35-0-0
-      ndk-27-0-12077973
-      ndk-28-2-13676358
-      platform-tools
-      emulator
-      platforms-android-31
-      platforms-android-33
-      platforms-android-34
-      platforms-android-35
-      platforms-android-36
-      system-images-android-36-google-apis-playstore-x86-64
-    ]);
+  outputs = { self, flake-parts, ... }@inputs:
+    flake-parts.lib.mkFlake { inherit inputs; } ({ ... }: {
+      systems =
+        [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
 
-  # Production package
-  # base = flake.packages.${system}.default;
-in pkgs.mkShell {
-  packages = [
-    pkgs.rustup
-    pkgs.webkitgtk_4_1
-    pkgs.olm
-    formatter
-    pinnedFlutter
-    androidCustomPackage
-    pinnedJDK
+      perSystem = { pkgs, system, ... }: {
+        _module.args.pkgs = import self.inputs.nixpkgs {
+          inherit system;
+          config.allowUnfree = true;
+          config.android_sdk.accept_license = true;
+          config.permittedInsecurePackages = [ "olm-3.2.16" ];
+        };
 
-    (pkgs.callPackage ./shell_vodozemac.nix {})
+        # Nix script formatter
+        formatter = pkgs.alejandra;
 
-    (pkgs.writeScriptBin "android-emulator" ''
-      ${androidEmulator}/bin/run-test-emulator
-    '')
-    (pkgs.writeScriptBin "android-emulator-no-gpu" ''
-      ${androidEmulatorNoGPU}/bin/run-test-emulator
-    '')
-  ];
+        # Development environment
+        devShells.default =
+          import ./nix/shell.nix self { inherit pkgs inputs; };
 
-  env = {
-    CMAKE_PREFIX_PATH = pkgs.lib.makeLibraryPath [ pkgs.libsecret.dev ];
-    ANDROID_HOME = "${androidCustomPackage}/share/android-sdk";
-    ANDROID_SDK_ROOT = "${androidCustomPackage}/share/android-sdk";
-    JAVA_HOME = pinnedJDK.home;
-    FLUTTER_ROOT = "${pinnedFlutter}";
-    CHROME_EXECUTABLE = "${pkgs.google-chrome}/bin/google-chrome-stable";
-    GRADLE_OPTS =
-      "-Dorg.gradle.project.android.aapt2FromMavenOverride=${androidCustomPackage}/share/android-sdk/build-tools/35.0.0/aapt2";
-  };
-
-  shellHook = ''
-    init-vodozemac
-
-    echo "---------------------------------------------------------------------------------------------------"
-    echo "in order to run android emulator, execute 'android-emulator' and 'android-emulator-no-gpu' commands"
-    echo "---------------------------------------------------------------------------------------------------"
-  '';
+        # Output package
+        packages = {
+          default = pkgs.callPackage ./nix { inherit inputs; };
+          web = pkgs.callPackage ./nix {
+            targetFlutterPlatform = "web";
+            inherit inputs;
+          };
+          apk = pkgs.callPackage ./nix {
+            targetFlutterPlatform = "apk";
+            inherit inputs system;
+          };
+        };
+      };
+    });
 }
