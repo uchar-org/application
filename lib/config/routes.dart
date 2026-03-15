@@ -76,7 +76,10 @@ abstract class AppRoutes {
           path: 'sign_in',
           pageBuilder: (context, state) =>
               defaultPageBuilder(context, state, SignInPage(signUp: false)),
-          redirect: loggedInRedirect,
+          redirect: ( BuildContext context, GoRouterState state,) {
+            Logs().i("call sign in redirect");
+            return loggedInRedirect(context, state);
+          },
         ),
         GoRoute(
           path: 'sign_up',
@@ -91,7 +94,10 @@ abstract class AppRoutes {
             state,
             Login(client: state.extra as Client),
           ),
-          redirect: loggedInRedirect,
+          redirect: ( BuildContext context, GoRouterState state,) {
+            Logs().i("call login redirect");
+            return loggedInRedirect(context, state);
+          },
         ),
       ],
     ),

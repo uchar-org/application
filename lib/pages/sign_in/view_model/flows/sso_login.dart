@@ -38,6 +38,9 @@ Future<void> ssoLoginFlow(
     callbackUrlScheme: urlScheme,
     options: FlutterWebAuth2Options(useWebview: PlatformInfos.isMobile),
   );
+
+  Logs().i("SSO result: $result");
+
   final token = Uri.parse(result).queryParameters['loginToken'];
   if (token?.isEmpty ?? false) return;
 

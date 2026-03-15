@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:go_router/go_router.dart';
+import 'package:matrix/matrix.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
 import 'package:fluffychat/l10n/l10n.dart';
@@ -27,6 +28,7 @@ void connectToHomeserverFlow(
     }
     final l10n = L10n.of(context);
     final client = await Matrix.of(context).getLoginClient();
+    Logs().i("client ${client.toString()}");
     final (_, _, loginFlows, _) = await client.checkHomeserver(homeserver);
 
     final supportsSso = loginFlows.any((flow) => flow.type == 'm.login.sso');

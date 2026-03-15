@@ -12,6 +12,9 @@ import 'package:fluffychat/pages/sign_in/view_model/model/public_homeserver_data
 import 'package:fluffychat/pages/sign_in/view_model/sign_in_state.dart';
 import 'package:fluffychat/widgets/matrix.dart';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:http/http.dart' as http;
+
 class SignInViewModel extends ValueNotifier<SignInState> {
   final MatrixState matrixService;
   final bool signUp;
@@ -57,20 +60,25 @@ class SignInViewModel extends ValueNotifier<SignInState> {
     final defaultHomeserverData = PublicHomeserverData(
       name: AppSettings.defaultHomeserver.value,
     );
-    try {
-      final client = await matrixService.getLoginClient();
-      final response = await client.httpClient.get(AppConfig.homeserverList);
-      final json = jsonDecode(response.body) as Map<String, dynamic>;
-      final homeserverJsonList = json['public_servers'] as List;
 
-      final publicHomeservers = homeserverJsonList
-          .map((json) => PublicHomeserverData.fromJson(json))
-          .toList();
+    try {
+      var publicHomeservers = <PublicHomeserverData>[];
+
+      if (!kIsWeb) {
+        // Native: Matrix SDK clientini ishlatish (avvalgidek)
+        final client = await matrixService.getLoginClient();
+        final response = await client.httpClient.get(AppConfig.homeserverList);
+        final json = jsonDecode(response.body) as Map<String, dynamic>;
+        final homeserverJsonList = json['public_servers'] as List;
+        publicHomeservers = homeserverJsonList
+            .map((json) => PublicHomeserverData.fromJson(json))
+            .toList();
+      }
+      // Web'da: faqat default server bilan ishlash (CORS muammosi)
+      // yoki o'zingizning proxy serveringizdan olish
 
       if (signUp) {
-        publicHomeservers.removeWhere((server) {
-          return server.regMethod == null;
-        });
+        publicHomeservers.removeWhere((server) => server.regMethod == null);
       }
 
       publicHomeservers.sort(sortHomeservers);
@@ -83,6 +91,8 @@ class SignInViewModel extends ValueNotifier<SignInState> {
 
       publicHomeservers.insert(0, defaultServer);
 
+      Logs().i("Public homeservers count: ${publicHomeservers.length}");
+
       value = value.copyWith(
         selectedHomeserver: value.selectedHomeserver ?? publicHomeservers.first,
         publicHomeservers: AsyncSnapshot.withData(
@@ -94,11 +104,13 @@ class SignInViewModel extends ValueNotifier<SignInState> {
       Logs().w('Unable to fetch public homeservers...', e, s);
       value = value.copyWith(
         selectedHomeserver: defaultHomeserverData,
-        publicHomeservers: AsyncSnapshot.withData(ConnectionState.done, [
-          defaultHomeserverData,
-        ]),
+        publicHomeservers: AsyncSnapshot.withData(
+          ConnectionState.done,
+          [defaultHomeserverData],
+        ),
       );
     }
+
     _filterHomeservers();
   }
 
